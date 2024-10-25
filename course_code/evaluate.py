@@ -74,7 +74,6 @@ if __name__ == "__main__":
     parser.add_argument("--dataset_path", type=str, default="example_data/dev_data.jsonl.bz2",
                         choices=["example_data/dev_data.jsonl.bz2", # example data
                                  "data/crag_task_1_dev_v4_release.jsonl.bz2", # full data
-                                 "test_data/test_data.jsonl.bz2", # test data
                                  ])
 
     parser.add_argument("--model_name", type=str, default="vanilla_baseline",
