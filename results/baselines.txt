@@ -1,0 +1,5 @@
+rag:
+{'score': -0.028464419475655478, 'exact_accuracy': 0.033707865168539325, 'accuracy': 0.23595505617977527, 'hallucination': 0.2644194756554307, 'missing': 0.49962546816479403, 'n_miss': 667, 'n_correct': 315, 'n_correct_exact': 45, 'total': 1335}
+
+vanilla:
+{'score': 0.01348314606741563, 'exact_accuracy': 0.0044943820224719105, 'accuracy': 0.12359550561797752, 'hallucination': 0.1101123595505618, 'missing': 0.7662921348314606, 'n_miss': 1023, 'n_correct': 165, 'n_correct_exact': 6, 'total': 1335}
