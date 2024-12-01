@@ -14,8 +14,14 @@ from openai import OpenAI
 
 from tqdm import tqdm
 
+from FlagEmbedding import FlagReranker
+
+import itertools
+
 #### CONFIG PARAMETERS ---
 
+# Define the number of best sentences to pre-filter for with cosine similarity
+NUM_SENTENCES_TO_CONSIDER = 40
 # Define the number of context sentences to consider for generating an answer.
 NUM_CONTEXT_SENTENCES = 20
 # Set the maximum length for each context sentence (in characters).
@@ -177,6 +183,11 @@ class RAGModel:
                 "cuda" if torch.cuda.is_available() else "cpu"
             ),
         )
+        
+        self.reranker_model = FlagReranker('BAAI/bge-reranker-v2-m3', use_fp16=True, devices=['cuda:1']) # Setting use_fp16 to True speeds up computation with a slight performance degradation
+        
+    def calculate_rankings(self, query, sentences):
+        return self.reranker_model.compute_score(zip(itertools.repeat(query), sentences), normalize=True)
 
     def calculate_embeddings(self, sentences):
         """
@@ -277,8 +288,14 @@ class RAGModel:
             cosine_scores = (relevant_chunks_embeddings * query_embedding).sum(1)
 
             # and retrieve top-N results.
-            retrieval_results = relevant_chunks[
-                (-cosine_scores).argsort()[:NUM_CONTEXT_SENTENCES]
+            cosine_results = relevant_chunks[
+                (-cosine_scores).argsort()[:NUM_SENTENCES_TO_CONSIDER]
+            ]
+            
+            scored_cosine_results = self.calculate_rankings(query, cosine_results)
+            
+            retrieval_results = cosine_results[
+                (-scored_cosine_results).argsort()[:NUM_CONTEXT_SENTENCES]
             ]
             
             # You might also choose to skip the steps above and 

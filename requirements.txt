@@ -2,6 +2,7 @@ accelerate
 beautifulsoup4
 bitsandbytes
 blingfire
+FlagEmbedding
 hf-transfer
 huggingface-hub
 loguru
