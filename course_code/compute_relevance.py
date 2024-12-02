@@ -384,48 +384,50 @@ class RAGModel:
 
         return formatted_prompts
 
-if __name__ == "__main__":
+### EXAMPLE
+        
+# if __name__ == "__main__":
 
-    ##EXAMPLE
+#     ##EXAMPLE
     
-    dataloader = [
-        {
-            "interaction_id": ["query_1", "query_2"],
-            "query": ["What is machine learning?", "Explain the capital of France."],
-            "search_results": [
-                [
-                    {"page_result": "<html><body>Machine learning is a subset of AI...</body></html>"},
-                    {"page_result": "<html><body>It focuses on algorithms and patterns...</body></html>"},
-                ],
-                [
-                    {"page_result": "<html><body>The capital of France is Paris...</body></html>"},
-                    {"page_result": "<html><body>Paris is known as the city of lights...</body></html>"},
-                ],
-            ],
-            "query_time": ["2024-12-01T12:00:00Z", "2024-12-01T12:05:00Z"],
-        }
-    ]
+#     dataloader = [
+#         {
+#             "interaction_id": ["query_1", "query_2"],
+#             "query": ["What is machine learning?", "Explain the capital of France."],
+#             "search_results": [
+#                 [
+#                     {"page_result": "<html><body>Machine learning is a subset of AI...</body></html>"},
+#                     {"page_result": "<html><body>It focuses on algorithms and patterns...</body></html>"},
+#                 ],
+#                 [
+#                     {"page_result": "<html><body>The capital of France is Paris...</body></html>"},
+#                     {"page_result": "<html><body>Paris is known as the city of lights...</body></html>"},
+#                 ],
+#             ],
+#             "query_time": ["2024-12-01T12:00:00Z", "2024-12-01T12:05:00Z"],
+#         }
+#     ]
 
 
-    rag_model = RAGModel()
-    rag_model.precompute_relevance(dataloader)
+#     rag_model = RAGModel()
+#     rag_model.precompute_relevance(dataloader)
 
-    #file will have precomputed relevance information
-    with open('retrieval_results.pkl', 'rb') as f:
-        retrieval_results = pkl.load(f) #retrieve the retrieval_results dictionary which maps interaction_id (query IDs) to the precomputed top-ranked sentences (chunks).
+#     #file will have precomputed relevance information
+#     with open('retrieval_results.pkl', 'rb') as f:
+#         retrieval_results = pkl.load(f) #retrieve the retrieval_results dictionary which maps interaction_id (query IDs) to the precomputed top-ranked sentences (chunks).
 
-    print("\nPrecomputed Relevance Results:")
-    for interaction_id, relevant_chunks in retrieval_results.items():
-        print(f"Interaction ID: {interaction_id}")
-        for idx, chunk in enumerate(relevant_chunks, 1):
-            print(f"  Chunk {idx}: {chunk}")
+#     print("\nPrecomputed Relevance Results:")
+#     for interaction_id, relevant_chunks in retrieval_results.items():
+#         print(f"Interaction ID: {interaction_id}")
+#         for idx, chunk in enumerate(relevant_chunks, 1):
+#             print(f"  Chunk {idx}: {chunk}")
 
-    # Example batch for answer generation
-    batch = {
-        "interaction_id": ["query_1", "query_2"],
-        "query": ["What is machine learning?", "Explain the capital of France."],
-        "query_time": ["2024-12-01T12:00:00Z", "2024-12-01T12:05:00Z"],
-    }
-    answers = rag_model.batch_generate_answer(batch, retrieval_results)
-    for i, answer in enumerate(answers, 1):
-        print(f"Answer {i}: {answer}")
+#     # Example batch for answer generation
+#     batch = {
+#         "interaction_id": ["query_1", "query_2"],
+#         "query": ["What is machine learning?", "Explain the capital of France."],
+#         "query_time": ["2024-12-01T12:00:00Z", "2024-12-01T12:05:00Z"],
+#     }
+#     answers = rag_model.batch_generate_answer(batch, retrieval_results)
+#     for i, answer in enumerate(answers, 1):
+#         print(f"Answer {i}: {answer}")
