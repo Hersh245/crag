@@ -77,10 +77,6 @@ if __name__ == "__main__":
                                  ])
 
     parser.add_argument("--model_name", type=str, default="vanilla_baseline",
-                        choices=["vanilla_baseline",
-                                 "rag_baseline"
-                                 # add your model here
-                                 ],
                         )
 
     parser.add_argument("--llm_name", type=str, default="meta-llama/Llama-3.2-3B-Instruct",

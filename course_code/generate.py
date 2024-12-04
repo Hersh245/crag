@@ -91,10 +91,6 @@ if __name__ == "__main__":
                              "0 for public validation set, 1 for public test set")
 
     parser.add_argument("--model_name", type=str, default="vanilla_baseline",
-                        choices=["vanilla_baseline",
-                                 "rag_baseline"
-                                 # add your model here
-                                 ],
                         )
 
     parser.add_argument("--llm_name", type=str, default="meta-llama/Llama-3.2-3B-Instruct",
@@ -127,13 +123,13 @@ if __name__ == "__main__":
     if model_name == "vanilla_baseline":
         from vanilla_baseline import InstructModel
         model = InstructModel(llm_name=llm_name, is_server=args.is_server, vllm_server=args.vllm_server)
-    elif model_name == "rag_baseline":
+    else:
         from rag_baseline import RAGModel
         model = RAGModel(llm_name=llm_name, is_server=args.is_server, vllm_server=args.vllm_server)
     # elif model_name == "your_model":
     #     add your model here
-    else:
-        raise ValueError("Model name not recognized.")
+    # else:
+    #     raise ValueError("Model name not recognized.")
 
     # make output directory
     output_directory = os.path.join("..", "output", dataset, model_name, _llm_name)

@@ -9,7 +9,7 @@ import vllm
 from blingfire import text_to_sentences_and_offsets
 from bs4 import BeautifulSoup
 from sentence_transformers import SentenceTransformer
-
+from collections import Counter
 from openai import OpenAI
 
 from tqdm import tqdm
@@ -166,7 +166,8 @@ class RAGModel:
                 gpu_memory_utilization=VLLM_GPU_MEMORY_UTILIZATION,
                 trust_remote_code=True,
                 dtype="half",  # note: bfloat16 is not supported on nvidia-T4 GPUs
-                enforce_eager=True
+                enforce_eager=True,
+                max_model_len=40000
             )
             self.tokenizer = self.llm.get_tokenizer()
 
@@ -291,21 +292,29 @@ class RAGModel:
         # Generate responses via vllm
         # note that here self.batch_size = 1
         if self.is_server:
+            responses = []
             response = self.llm_client.chat.completions.create(
                 model=self.llm_name,
                 messages=formatted_prompts[0],
-                n=1,  # Number of output sequences to return for each prompt.
+                n=10,  # Number of output sequences to return for each prompt.
                 top_p=0.9,  # Float that controls the cumulative probability of the top tokens to consider.
                 temperature=0.1,  # randomness of the sampling
                 # skip_special_tokens=True,  # Whether to skip special tokens in the output.
                 max_tokens=50,  # Maximum number of tokens to generate per output sequence.
             )
-            answers = [response.choices[0].message.content]
+            responses.append(response)
+
+            answers = []
+            for response in responses:
+                outputs = [choice.message.content for choice in response.choices]
+                counter = Counter(outputs)
+                majority_answer = counter.most_common(1)[0][0]
+                answers.append(majority_answer)
         else:
             responses = self.llm.generate(
                 formatted_prompts,
                 vllm.SamplingParams(
-                    n=1,  # Number of output sequences to return for each prompt.
+                    n=10,  # Number of output sequences to return for each prompt.
                     top_p=0.9,  # Float that controls the cumulative probability of the top tokens to consider.
                     temperature=0.1,  # randomness of the sampling
                     skip_special_tokens=True,  # Whether to skip special tokens in the output.
@@ -315,7 +324,10 @@ class RAGModel:
             )
             answers = []
             for response in responses:
-                answers.append(response.outputs[0].text)
+                outputs = [output.text for output in response.outputs]
+                counter = Counter(outputs)
+                majority_answer = counter.most_common(1)[0][0]
+                answers.append(majority_answer)
 
         return answers
 
