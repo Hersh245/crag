@@ -5,20 +5,17 @@ from typing import Any, Dict, List
 import numpy as np
 import ray
 import torch
-import vllm
 from blingfire import text_to_sentences_and_offsets
 from bs4 import BeautifulSoup
 from sentence_transformers import SentenceTransformer
 
 from openai import OpenAI
-
 from tqdm import tqdm
-
 from FlagEmbedding import FlagReranker
-
 import itertools
-
 import pickle as pkl
+
+from generate import load_data_in_batches
 
 #### CONFIG PARAMETERS ---
 
@@ -157,39 +154,11 @@ class RAGModel:
         self.is_server = is_server
         self.vllm_server = vllm_server
 
-        if self.is_server:
-            # initialize the model with vllm server
-            openai_api_key = "EMPTY"
-            openai_api_base = self.vllm_server
-            self.llm_client = OpenAI(
-                api_key=openai_api_key,
-                base_url=openai_api_base,
-            )
-        else:
-            # initialize the model with vllm offline inference
-            self.llm = vllm.LLM(
-                model=self.llm_name,
-                worker_use_ray=True,
-                tensor_parallel_size=VLLM_TENSOR_PARALLEL_SIZE,
-                gpu_memory_utilization=VLLM_GPU_MEMORY_UTILIZATION,
-                trust_remote_code=True,
-                dtype="half",  # note: bfloat16 is not supported on nvidia-T4 GPUs
-                enforce_eager=True
-            )
-            self.tokenizer = self.llm.get_tokenizer()
-
-        # Load a sentence transformer model optimized for sentence embeddings, using CUDA if available.
-        self.sentence_model = SentenceTransformer(
-            "all-MiniLM-L6-v2",
-            device=torch.device(
-                "cuda" if torch.cuda.is_available() else "cpu"
-            ),
-        )
-        
-        self.reranker_model = FlagReranker('BAAI/bge-reranker-v2-m3', use_fp16=True, devices=['cuda:1']) # Setting use_fp16 to True speeds up computation with a slight performance degradation
+        self.reranker_model = FlagReranker('BAAI/bge-reranker-v2-m3', use_fp16=True, devices=['cuda:0']) # Setting use_fp16 to True speeds up computation with a slight performance degradation
         
     def calculate_rankings(self, query, sentences):
-        return self.reranker_model.compute_score(zip(itertools.repeat(query), sentences), normalize=True)
+        # print(list(zip(itertools.repeat(query), sentences)))
+        return self.reranker_model.compute_score(list(zip(itertools.repeat(query), sentences)), normalize=True)
 
     def calculate_embeddings(self, sentences):
         """
@@ -273,10 +242,10 @@ class RAGModel:
         return answers
 
 
-    def precompute_relevance(self, dataloader):
+    def precompute_relevance(self, dataloader, out_file):
         # Retrieve top matches for the whole batch
         retrieval_results = defaultdict(list)
-        for batch in dataloader:
+        for batch in tqdm(dataloader):
             batch_interaction_ids = batch["interaction_id"]
             queries = batch["query"]
             batch_search_results = batch["search_results"]
@@ -288,43 +257,31 @@ class RAGModel:
             )
 
             # Calculate all chunk embeddings
-            chunk_embeddings = self.calculate_embeddings(chunks)
+            # chunk_embeddings = self.calculate_embeddings(chunks)
 
             # Calculate embeddings for queries
-            query_embeddings = self.calculate_embeddings(queries)
+            # query_embeddings = self.calculate_embeddings(queries)
 
             for _idx, interaction_id in enumerate(batch_interaction_ids):
                 query = queries[_idx]
                 query_time = query_times[_idx]
-                query_embedding = query_embeddings[_idx]
+                # query_embedding = query_embeddings[_idx]
 
                 # Identify chunks that belong to this interaction_id
                 relevant_chunks_mask = chunk_interaction_ids == interaction_id
 
                 # Filter out the said chunks and corresponding embeddings
                 relevant_chunks = chunks[relevant_chunks_mask]
-                relevant_chunks_embeddings = chunk_embeddings[relevant_chunks_mask]
+                # relevant_chunks_embeddings = chunk_embeddings[relevant_chunks_mask]
 
-                # Calculate cosine similarity between query and chunk embeddings,
-                cosine_scores = (relevant_chunks_embeddings * query_embedding).sum(1)
-
-                # and retrieve top-N results.
-                cosine_results = relevant_chunks[
-                    (-cosine_scores).argsort()[:NUM_SENTENCES_TO_CONSIDER]
-                ]
-                
-                scored_cosine_results = self.calculate_rankings(query, cosine_results)
-                
-                batch_retrieval_results = cosine_results[
-                    (-scored_cosine_results).argsort()[:NUM_CONTEXT_SENTENCES]
-                ]
+                results = self.calculate_rankings(query, relevant_chunks)
                 
                 # You might also choose to skip the steps above and 
                 # use a vectorDB directly.
-                retrieval_results[interaction_id].append(batch_retrieval_results)
+                retrieval_results[interaction_id].append(results)
 
-        with open('retrieval_results.pkl', 'wb') as f:
-            pkl.dump(f, retrieval_results)
+        with open(f'../output/retrieval_results/{out_file}.pkl', 'wb') as f:
+            pkl.dump(retrieval_results, f)
             
 
     def format_prompts(self, queries, query_times, batch_retrieval_results=[]):
@@ -383,6 +340,12 @@ class RAGModel:
                 )
 
         return formatted_prompts
+
+if __name__ == "__main__":
+    # dataloader = load_data_in_batches("example_data/dev_data.jsonl.bz2", 8)
+    dataloader = load_data_in_batches("../data/crag_task_1_dev_v4_release.jsonl.bz2", 8)
+    rag_model = RAGModel()
+    rag_model.precompute_relevance(dataloader, out_file = f'data_chunksize={MAX_CONTEXT_SENTENCE_LENGTH}')
 
 ### EXAMPLE
         

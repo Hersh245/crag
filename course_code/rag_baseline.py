@@ -9,6 +9,7 @@ import vllm
 from blingfire import text_to_sentences_and_offsets
 from bs4 import BeautifulSoup
 from sentence_transformers import SentenceTransformer
+import pickle as pkl
 
 from openai import OpenAI
 
@@ -21,13 +22,14 @@ import itertools
 #### CONFIG PARAMETERS ---
 
 # Define the number of best sentences to pre-filter for with cosine similarity
-NUM_SENTENCES_TO_CONSIDER = 40
+NUM_SENTENCES_TO_CONSIDER = 50
 # Define the number of context sentences to consider for generating an answer.
-NUM_CONTEXT_SENTENCES = 20
+NUM_CONTEXT_SENTENCES = 40
 # Set the maximum length for each context sentence (in characters).
 MAX_CONTEXT_SENTENCE_LENGTH = 1000
 # Set the maximum context references length (in characters).
 MAX_CONTEXT_REFERENCES_LENGTH = 4000
+THRESHOLD = 0.1
 
 # Batch size you wish the evaluators will use to call the `batch_generate_answer` function
 AICROWD_SUBMISSION_BATCH_SIZE = 1 # TUNE THIS VARIABLE depending on the number of GPUs you are requesting and the size of your model.
@@ -146,9 +148,17 @@ class RAGModel:
     An example RAGModel for the KDDCup 2024 Meta CRAG Challenge
     which includes all the key components of a RAG lifecycle.
     """
-    def __init__(self, llm_name="meta-llama/Llama-3.2-3B-Instruct", is_server=False, vllm_server=None):
+    def __init__(self, llm_name="meta-llama/Llama-3.2-3B-Instruct", is_server=False, vllm_server=None, relevance_scores_path=None, num_context_sentences=NUM_CONTEXT_SENTENCES):
+        if not relevance_scores_path:
+            self.use_precomputed_scores = False
+            self.relevance_scores = None
+        else:
+            self.use_precomputed_scores = True
+            with open(relevance_scores_path, 'rb') as f:
+                self.relevance_scores = pkl.load(f)
         self.initialize_models(llm_name, is_server, vllm_server)
         self.chunk_extractor = ChunkExtractor()
+        self.num_context_sentences = num_context_sentences
 
     def initialize_models(self, llm_name, is_server, vllm_server):
         self.llm_name = llm_name
@@ -169,10 +179,11 @@ class RAGModel:
                 model=self.llm_name,
                 worker_use_ray=True,
                 tensor_parallel_size=VLLM_TENSOR_PARALLEL_SIZE,
-                gpu_memory_utilization=VLLM_GPU_MEMORY_UTILIZATION,
+                gpu_memory_utilization=0.8, # VLLM_GPU_MEMORY_UTILIZATION,
                 trust_remote_code=True,
                 dtype="half",  # note: bfloat16 is not supported on nvidia-T4 GPUs
-                enforce_eager=True
+                enforce_eager=True,
+                max_model_len=23376
             )
             self.tokenizer = self.llm.get_tokenizer()
 
@@ -184,7 +195,7 @@ class RAGModel:
             ),
         )
         
-        self.reranker_model = FlagReranker('BAAI/bge-reranker-v2-m3', use_fp16=True, devices=['cuda:1']) # Setting use_fp16 to True speeds up computation with a slight performance degradation
+        self.reranker_model = FlagReranker('BAAI/bge-reranker-v2-m3', use_fp16=True, devices=['cuda:0']) # Setting use_fp16 to True speeds up computation with a slight performance degradation
         
     def calculate_rankings(self, query, sentences):
         return self.reranker_model.compute_score(zip(itertools.repeat(query), sentences), normalize=True)
@@ -264,14 +275,53 @@ class RAGModel:
             batch_interaction_ids, batch_search_results
         )
 
-        # Calculate all chunk embeddings
-        chunk_embeddings = self.calculate_embeddings(chunks)
+        if not self.use_precomputed_scores:
 
-        # Calculate embeddings for queries
-        query_embeddings = self.calculate_embeddings(queries)
+            # Calculate all chunk embeddings
+            chunk_embeddings = self.calculate_embeddings(chunks)
+
+            # Calculate embeddings for queries
+            query_embeddings = self.calculate_embeddings(queries)
+
+            # # Retrieve top matches for the whole batch
+            # batch_retrieval_results = []
+            # for _idx, interaction_id in enumerate(batch_interaction_ids):
+            #     query = queries[_idx]
+            #     query_time = query_times[_idx]
+            #     query_embedding = query_embeddings[_idx]
+
+            #     # Identify chunks that belong to this interaction_id
+            #     relevant_chunks_mask = chunk_interaction_ids == interaction_id
+
+            #     # Filter out the said chunks and corresponding embeddings
+            #     relevant_chunks = chunks[relevant_chunks_mask]
+            #     relevant_chunks_embeddings = chunk_embeddings[relevant_chunks_mask]
+
+            #     # Calculate cosine similarity between query and chunk embeddings,
+            #     cosine_scores = (relevant_chunks_embeddings * query_embedding).sum(1)
+
+            #     # and retrieve top-N results.
+            #     cosine_results = relevant_chunks[
+            #         (-cosine_scores).argsort()[:NUM_SENTENCES_TO_CONSIDER]
+            #     ]
+                
+            #     scored_cosine_results = self.calculate_rankings(query, cosine_results)
+                
+            #     retrieval_results = cosine_results[
+            #         (-scored_cosine_results).argsort()[:self.num_context_sentences]
+            #     ]
+                
+            #     # You might also choose to skip the steps above and 
+            #     # use a vectorDB directly.
+            #     batch_retrieval_results.append(retrieval_results)
 
         # Retrieve top matches for the whole batch
         batch_retrieval_results = []
+        batch_scores = []
+        chunk_embeddings = self.calculate_embeddings(chunks)
+        query_embeddings = self.calculate_embeddings(queries)
+
+
         for _idx, interaction_id in enumerate(batch_interaction_ids):
             query = queries[_idx]
             query_time = query_times[_idx]
@@ -282,28 +332,33 @@ class RAGModel:
 
             # Filter out the said chunks and corresponding embeddings
             relevant_chunks = chunks[relevant_chunks_mask]
-            relevant_chunks_embeddings = chunk_embeddings[relevant_chunks_mask]
-
             # Calculate cosine similarity between query and chunk embeddings,
+            relevant_chunks_embeddings = chunk_embeddings[relevant_chunks_mask]
             cosine_scores = (relevant_chunks_embeddings * query_embedding).sum(1)
 
             # and retrieve top-N results.
-            cosine_results = relevant_chunks[
+            cosine_filtered_chunks = relevant_chunks[
                 (-cosine_scores).argsort()[:NUM_SENTENCES_TO_CONSIDER]
             ]
-            
-            scored_cosine_results = self.calculate_rankings(query, cosine_results)
-            
-            retrieval_results = cosine_results[
-                (-scored_cosine_results).argsort()[:NUM_CONTEXT_SENTENCES]
-            ]
+
+            bge_rerankings = self.reranker_model.compute_score(list(zip(itertools.repeat(query), cosine_filtered_chunks)), normalize=True)
+            bge_rerankings = np.asarray(bge_rerankings)
+
+            chunks_to_keep = (-bge_rerankings).argsort()[:self.num_context_sentences]
+            print(bge_rerankings[chunks_to_keep])
+            scores = bge_rerankings[chunks_to_keep]
+            batch_scores.append(scores)
+
+            retrieval_results = cosine_filtered_chunks[chunks_to_keep]
             
             # You might also choose to skip the steps above and 
             # use a vectorDB directly.
-            batch_retrieval_results.append(retrieval_results)
-            
+            # print(retrieval_results)
+            batch_retrieval_results.append(retrieval_results)        
+        
         # Prepare formatted prompts from the LLM        
-        formatted_prompts = self.format_prompts(queries, query_times, batch_retrieval_results)
+        formatted_prompts = self.format_prompts(queries, query_times, batch_retrieval_results, batch_scores)
+        # print(formatted_prompts[0])
 
         # Generate responses via vllm
         # note that here self.batch_size = 1
@@ -345,7 +400,7 @@ class RAGModel:
         - query_times (List[str]): A list of query_time strings corresponding to each query.
         - batch_retrieval_results (List[str])
         """        
-        system_prompt = "You are provided with a question and various references. Your task is to answer the question succinctly, using the fewest words possible. If the references do not contain the necessary information to answer the question, respond with 'I don't know'. There is no need to explain the reasoning behind your answers."
+        system_prompt = "You are provided with a question and various references in order of relevance. Your task is to answer the question succinctly, using the fewest words possible. If the references do not contain the necessary information to answer the question, respond with 'I don't know'. There is no need to explain the reasoning behind your answers."
         formatted_prompts = []
 
         for _idx, query in enumerate(queries):

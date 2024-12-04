@@ -86,6 +86,7 @@ if __name__ == "__main__":
                         choices=["example_data/dev_data.jsonl.bz2", # example data
                                  "data/crag_task_1_dev_v4_release.jsonl.bz2", # full data
                                  ])
+    parser.add_argument("--relevance_scores_path", type=str, default="")
     parser.add_argument("--split", type=int, default=-1,
                         help="The split of the dataset to use. This is only relevant for the full data: "
                              "0 for public validation set, 1 for public test set")
@@ -96,6 +97,7 @@ if __name__ == "__main__":
                                  # add your model here
                                  ],
                         )
+    parser.add_argument('--num_context_sentences', type=int, default=20)
 
     parser.add_argument("--llm_name", type=str, default="meta-llama/Llama-3.2-3B-Instruct",
                         choices=["meta-llama/Llama-3.2-3B-Instruct",
@@ -129,13 +131,17 @@ if __name__ == "__main__":
         model = InstructModel(llm_name=llm_name, is_server=args.is_server, vllm_server=args.vllm_server)
     elif model_name == "rag_baseline":
         from rag_baseline import RAGModel
-        model = RAGModel(llm_name=llm_name, is_server=args.is_server, vllm_server=args.vllm_server)
+        model = RAGModel(llm_name=llm_name, is_server=args.is_server, vllm_server=args.vllm_server, relevance_scores_path=args.relevance_scores_path, num_context_sentences=args.num_context_sentences)
     # elif model_name == "your_model":
     #     add your model here
     else:
         raise ValueError("Model name not recognized.")
 
     # make output directory
+    if args.relevance_scores_path:
+        fname = os.path.basename(args.relevance_scores_path).split(".")[0]
+        model_name = fname
+    model_name += f'_sentences={args.num_context_sentences}_v2'
     output_directory = os.path.join("..", "output", dataset, model_name, _llm_name)
     os.makedirs(output_directory, exist_ok=True)
 

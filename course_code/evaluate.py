@@ -92,6 +92,7 @@ if __name__ == "__main__":
                         help="Whether we use vLLM deployed on a server or offline inference.")
     parser.add_argument("--vllm_server", type=str, default="http://localhost:8088/v1",
                         help="URL of the vLLM server if is_server is True. The port number may vary.")
+    parser.add_argument("--output_directory", type=str, default="")
     parser.add_argument("--max_retries", type=int, default=10,
                         help="Number of retries for evaluation per query.")
 
@@ -113,8 +114,11 @@ if __name__ == "__main__":
 
 
     # get output directory
-    model_name = args.model_name
-    output_directory = os.path.join("..", "output", dataset, model_name, _llm_name)
+    if not args.output_directory:
+        model_name = args.model_name
+        output_directory = os.path.join("..", "output", dataset, model_name, _llm_name)
+    else:
+        output_directory = os.path.join("..", args.output_directory, _llm_name)
     if not os.path.exists(output_directory):
         raise FileNotFoundError(f"Output directory {output_directory} does not exist.")
 
