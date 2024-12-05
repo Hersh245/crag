@@ -34,14 +34,14 @@ THRESHOLD = 0.1
 # Batch size you wish the evaluators will use to call the `batch_generate_answer` function
 AICROWD_SUBMISSION_BATCH_SIZE = 1 # TUNE THIS VARIABLE depending on the number of GPUs you are requesting and the size of your model.
 
-# VLLM Parameters 
+# VLLM Parameters
 VLLM_TENSOR_PARALLEL_SIZE = 1 # TUNE THIS VARIABLE depending on the number of GPUs you are requesting and the size of your model.
 VLLM_GPU_MEMORY_UTILIZATION = 0.85 # TUNE THIS VARIABLE depending on the number of GPUs you are requesting and the size of your model.
 
 # Sentence Transformer Parameters
 SENTENTENCE_TRANSFORMER_BATCH_SIZE = 32 # TUNE THIS VARIABLE depending on the size of your embedding model and GPU mem available
 
-#### CONFIG PARAMETERS END---
+### CONFIG PARAMETERS END---
 
 class ChunkExtractor:
 
@@ -194,9 +194,9 @@ class RAGModel:
                 "cuda" if torch.cuda.is_available() else "cpu"
             ),
         )
-        
+
         self.reranker_model = FlagReranker('BAAI/bge-reranker-v2-m3', use_fp16=True, devices=['cuda:0']) # Setting use_fp16 to True speeds up computation with a slight performance degradation
-        
+
     def calculate_rankings(self, query, sentences):
         return self.reranker_model.compute_score(zip(itertools.repeat(query), sentences), normalize=True)
 
@@ -221,24 +221,24 @@ class RAGModel:
         )
         # Note: There is an opportunity to parallelize the embedding generation across 4 GPUs
         #       but sentence_model.encode_multi_process seems to interefere with Ray
-        #       on the evaluation servers. 
+        #       on the evaluation servers.
         #       todo: this can also be done in a Ray native approach.
-        #       
+        #
         return embeddings
 
     def get_batch_size(self) -> int:
         """
         Determines the batch size that is used by the evaluator when calling the `batch_generate_answer` function.
-        
-        The evaluation timeouts linearly scale with the batch size. 
-            i.e.: time out for the `batch_generate_answer` call = batch_size * per_sample_timeout 
-        
+
+        The evaluation timeouts linearly scale with the batch size.
+            i.e.: time out for the `batch_generate_answer` call = batch_size * per_sample_timeout
+
 
         Returns:
             int: The batch size, an integer between 1 and 16. It can be dynamic
                  across different batch_generate_answer calls, or stay a static value.
         """
-        self.batch_size = AICROWD_SUBMISSION_BATCH_SIZE  
+        self.batch_size = AICROWD_SUBMISSION_BATCH_SIZE
         return self.batch_size
 
     def batch_generate_answer(self, batch: Dict[str, Any]) -> List[str]:
@@ -275,14 +275,6 @@ class RAGModel:
             batch_interaction_ids, batch_search_results
         )
 
-        if not self.use_precomputed_scores:
-
-            # Calculate all chunk embeddings
-            chunk_embeddings = self.calculate_embeddings(chunks)
-
-            # Calculate embeddings for queries
-            query_embeddings = self.calculate_embeddings(queries)
-
         # Retrieve top matches for the whole batch
         batch_retrieval_results = []
         batch_scores = []
@@ -313,18 +305,15 @@ class RAGModel:
             bge_rerankings = np.asarray(bge_rerankings)
 
             chunks_to_keep = (-bge_rerankings).argsort()[:self.num_context_sentences]
-            print(bge_rerankings[chunks_to_keep])
             scores = bge_rerankings[chunks_to_keep]
-            batch_scores.append(scores)
-
             retrieval_results = cosine_filtered_chunks[chunks_to_keep]
-            
-            # You might also choose to skip the steps above and 
-            # use a vectorDB directly.
-            # print(retrieval_results)
-            batch_retrieval_results.append(retrieval_results)        
-        
-        # Prepare formatted prompts from the LLM        
+
+            # chunks_to_keep = np.where(scores > THRESHOLD)
+            # scores = bge_rerankings[chunks_to_keep]
+            batch_scores.append(scores)
+            batch_retrieval_results.append(retrieval_results)
+
+        # Prepare formatted prompts from the LLM
         formatted_prompts = self.format_prompts(queries, query_times, batch_retrieval_results, batch_scores)
         # print(formatted_prompts[0])
 
@@ -355,20 +344,21 @@ class RAGModel:
             )
             answers = []
             for response in responses:
-                answers.append(response.outputs[0].text)
+                answer = response.outputs[0].text
+                answers.append(str(answer).lower().rstrip('.'))
 
         return answers
 
     def format_prompts(self, queries, query_times, batch_retrieval_results=[], relevance_scores = None):
         """
         Formats queries, corresponding query_times and retrieval results using the chat_template of the model.
-            
+
         Parameters:
         - queries (List[str]): A list of queries to be formatted into prompts.
         - query_times (List[str]): A list of query_time strings corresponding to each query.
         - batch_retrieval_results (List[str])
-        """        
-        system_prompt = "You are provided with a question and various references in order of relevance. Relevance scores from 0-1 for each are also provided at the end of each reference. Your task is to answer the question succinctly, using the fewest words possible. If the references do not contain the necessary information to answer the question, respond with 'I don't know'. There is no need to explain the reasoning behind your answers."
+        """
+        system_prompt = "You are provided with a question and various references in order of relevance. Relevance scores from 0-1 for each are also provided at the end of each reference. Your task is to answer the question succinctly, using the fewest words possible. If the references do not contain the necessary information to answer the question, respond with 'I don't know'. Do not explain your answers."
         formatted_prompts = []
 
         for _idx, query in enumerate(queries):
@@ -377,7 +367,7 @@ class RAGModel:
 
             user_message = ""
             references = ""
-            
+
             if len(retrieval_results) > 0:
                 references += "# References \n"
                 # Format the top sentences as references in the model's prompt template.
@@ -385,12 +375,12 @@ class RAGModel:
                     # print(relevance_scores[_idx][_snippet_idx])
                     # print(float(relevance_scores[_snippet_idx]))
                     references += f"- {snippet.strip()}, (score = {round(float(relevance_scores[_idx][_snippet_idx]), 3)})\n"
-            
+
             references = references[:MAX_CONTEXT_REFERENCES_LENGTH]
             # Limit the length of references to fit the model's input size.
 
             user_message += f"{references}\n------\n\n"
-            user_message 
+            user_message
             user_message += f"Using only the references listed above, answer the following question: \n"
             user_message += f"Current Time: {query_time}\n"
             user_message += f"Question: {query}\n"
