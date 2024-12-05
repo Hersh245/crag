@@ -283,38 +283,6 @@ class RAGModel:
             # Calculate embeddings for queries
             query_embeddings = self.calculate_embeddings(queries)
 
-            # # Retrieve top matches for the whole batch
-            # batch_retrieval_results = []
-            # for _idx, interaction_id in enumerate(batch_interaction_ids):
-            #     query = queries[_idx]
-            #     query_time = query_times[_idx]
-            #     query_embedding = query_embeddings[_idx]
-
-            #     # Identify chunks that belong to this interaction_id
-            #     relevant_chunks_mask = chunk_interaction_ids == interaction_id
-
-            #     # Filter out the said chunks and corresponding embeddings
-            #     relevant_chunks = chunks[relevant_chunks_mask]
-            #     relevant_chunks_embeddings = chunk_embeddings[relevant_chunks_mask]
-
-            #     # Calculate cosine similarity between query and chunk embeddings,
-            #     cosine_scores = (relevant_chunks_embeddings * query_embedding).sum(1)
-
-            #     # and retrieve top-N results.
-            #     cosine_results = relevant_chunks[
-            #         (-cosine_scores).argsort()[:NUM_SENTENCES_TO_CONSIDER]
-            #     ]
-                
-            #     scored_cosine_results = self.calculate_rankings(query, cosine_results)
-                
-            #     retrieval_results = cosine_results[
-            #         (-scored_cosine_results).argsort()[:self.num_context_sentences]
-            #     ]
-                
-            #     # You might also choose to skip the steps above and 
-            #     # use a vectorDB directly.
-            #     batch_retrieval_results.append(retrieval_results)
-
         # Retrieve top matches for the whole batch
         batch_retrieval_results = []
         batch_scores = []
@@ -391,7 +359,7 @@ class RAGModel:
 
         return answers
 
-    def format_prompts(self, queries, query_times, batch_retrieval_results=[]):
+    def format_prompts(self, queries, query_times, batch_retrieval_results=[], relevance_scores = None):
         """
         Formats queries, corresponding query_times and retrieval results using the chat_template of the model.
             
@@ -400,7 +368,7 @@ class RAGModel:
         - query_times (List[str]): A list of query_time strings corresponding to each query.
         - batch_retrieval_results (List[str])
         """        
-        system_prompt = "You are provided with a question and various references in order of relevance. Your task is to answer the question succinctly, using the fewest words possible. If the references do not contain the necessary information to answer the question, respond with 'I don't know'. There is no need to explain the reasoning behind your answers."
+        system_prompt = "You are provided with a question and various references in order of relevance. Relevance scores from 0-1 for each are also provided at the end of each reference. Your task is to answer the question succinctly, using the fewest words possible. If the references do not contain the necessary information to answer the question, respond with 'I don't know'. There is no need to explain the reasoning behind your answers."
         formatted_prompts = []
 
         for _idx, query in enumerate(queries):
@@ -414,7 +382,9 @@ class RAGModel:
                 references += "# References \n"
                 # Format the top sentences as references in the model's prompt template.
                 for _snippet_idx, snippet in enumerate(retrieval_results):
-                    references += f"- {snippet.strip()}\n"
+                    # print(relevance_scores[_idx][_snippet_idx])
+                    # print(float(relevance_scores[_snippet_idx]))
+                    references += f"- {snippet.strip()}, (score = {round(float(relevance_scores[_idx][_snippet_idx]), 3)})\n"
             
             references = references[:MAX_CONTEXT_REFERENCES_LENGTH]
             # Limit the length of references to fit the model's input size.
