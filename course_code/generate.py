@@ -93,7 +93,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--model_name", type=str, default="vanilla_baseline",
                         choices=["vanilla_baseline",
-                                 "rag_baseline"
+                                 "rag_baseline",
+                                 "rag_reranker",
                                  # add your model here
                                  ],
                         )
@@ -132,16 +133,18 @@ if __name__ == "__main__":
     elif model_name == "rag_baseline":
         from rag_baseline import RAGModel
         model = RAGModel(llm_name=llm_name, is_server=args.is_server, vllm_server=args.vllm_server, relevance_scores_path=args.relevance_scores_path, num_context_sentences=args.num_context_sentences)
-    # elif model_name == "your_model":
-    #     add your model here
+    elif model_name == "rag_reranker":
+        from rag_reranker import RAGModel
+        model = RAGModel(llm_name=llm_name, is_server=args.is_server, vllm_server=args.vllm_server, relevance_scores_path=args.relevance_scores_path, num_context_sentences=args.num_context_sentences)
     else:
         raise ValueError("Model name not recognized.")
 
     # make output directory
+    additional_info = "first_parent_run"
     if args.relevance_scores_path:
         fname = os.path.basename(args.relevance_scores_path).split(".")[0]
         model_name = fname
-    model_name += f'_sentences={args.num_context_sentences}_v2'
+    model_name += f'_sentences={args.num_context_sentences}_v2_' + additional_info
     output_directory = os.path.join("..", "output", dataset, model_name, _llm_name)
     os.makedirs(output_directory, exist_ok=True)
 

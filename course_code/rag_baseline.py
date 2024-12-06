@@ -63,7 +63,17 @@ class ChunkExtractor:
         """
         # Parse the HTML content using BeautifulSoup
         soup = BeautifulSoup(html_source, "lxml")
-        text = soup.get_text(" ", strip=True)  # Use space as a separator, strip whitespaces
+        text = soup.find("section")
+        if text is not None:
+            text = text.get_text(" ", strip=True)
+        else:
+            text = soup.find("article")
+            if text is not None:
+                text = text.get_text(" ", strip=True)
+            else:
+                text = soup.find("body")
+                if text is not None:
+                    text = text.get_text(" ", strip=True)  # Use space as a separator, strip whitespaces
 
         if not text:
             # Return a list with empty string when no text is extracted
