@@ -100,7 +100,7 @@ if __name__ == "__main__":
                         )
     parser.add_argument('--num_context_sentences', type=int, default=20)
 
-    parser.add_argument("--llm_name", type=str, default="meta-llama/Llama-3.2-3B-Instruct",
+    parser.add_argument("--llm_name", type=str, default="meta-llama/Llama-3.2-1B-Instruct",
                         choices=["meta-llama/Llama-3.2-3B-Instruct",
                                  "google/gemma-2-2b-it",
                                  "meta-llama/Llama-3.2-1B-Instruct"
@@ -140,7 +140,7 @@ if __name__ == "__main__":
         raise ValueError("Model name not recognized.")
 
     # make output directory
-    additional_info = "first_parent_run"
+    additional_info = "small_parent_run"
     if args.relevance_scores_path:
         fname = os.path.basename(args.relevance_scores_path).split(".")[0]
         model_name = fname
@@ -150,6 +150,7 @@ if __name__ == "__main__":
 
     # Generate predictions
     queries, ground_truths, predictions = generate_predictions(dataset_path, model, split)
+    # queries, ground_truths, predictions = [], [], []
 
     # save predictions
     json.dump({"queries": queries, "ground_truths": ground_truths, "predictions": predictions},
