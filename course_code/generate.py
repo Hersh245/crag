@@ -92,10 +92,14 @@ if __name__ == "__main__":
 
     parser.add_argument("--model_name", type=str, default="vanilla_baseline",
                         choices=["vanilla_baseline",
-                                 "rag_baseline"
-                                 # add your model here
+                                 "rag_baseline",
+                                 "rag_self_consistency",
+                                 "rag_tree_of_thought",
+                                 "rag_reranker",
+                                 "rag_chunked_reranker"
                                  ],
                         )
+    parser.add_argument('--num_context_sentences', type=int, default=20)
 
     parser.add_argument("--llm_name", type=str, default="meta-llama/Llama-3.2-3B-Instruct",
                         choices=["meta-llama/Llama-3.2-3B-Instruct",
@@ -130,8 +134,18 @@ if __name__ == "__main__":
     elif model_name == "rag_baseline":
         from rag_baseline import RAGModel
         model = RAGModel(llm_name=llm_name, is_server=args.is_server, vllm_server=args.vllm_server)
-    # elif model_name == "your_model":
-    #     add your model here
+    elif model_name == "rag_self_consistency":
+        from rag_self_consistency import RAGModel
+        model = RAGModel(llm_name=llm_name, is_server=args.is_server, vllm_server=args.vllm_server)
+    elif model_name == "rag_tree_of_thought":
+        from rag_tree_of_thought import RAGModel
+        model = RAGModel(llm_name=llm_name, is_server=args.is_server, vllm_server=args.vllm_server)
+    elif model_name == "rag_reranker":
+        from rag_reranker import RAGModel
+        model = RAGModel(llm_name=llm_name, is_server=args.is_server, vllm_server=args.vllm_server, num_context_sentences=args.num_context_sentences)
+    elif model_name == "rag_chunked_reranker":
+        from rag_chunked_reranker import RAGModel
+        model = RAGModel(llm_name=llm_name, is_server=args.is_server, vllm_server=args.vllm_server, num_context_sentences=args.num_context_sentences)
     else:
         raise ValueError("Model name not recognized.")
 

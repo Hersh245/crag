@@ -78,8 +78,11 @@ if __name__ == "__main__":
 
     parser.add_argument("--model_name", type=str, default="vanilla_baseline",
                         choices=["vanilla_baseline",
-                                 "rag_baseline"
-                                 # add your model here
+                                 "rag_baseline",
+                                 "rag_self_consistency",
+                                 "rag_tree_of_thought",
+                                 "rag_reranker",
+                                 "rag_chunked_reranker"
                                  ],
                         )
 
